@@ -1,0 +1,38 @@
+{
+  "name": "docker-borg-backup",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "tsc -p ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudxde/docker-borg-backup.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rudxde/docker-borg-backup/issues"
+  },
+  "homepage": "https://github.com/rudxde/docker-borg-backup#readme",
+  "dependencies": {
+    "node-cron": "^2.0.3",
+    "yargs": "^16.1.1"
+  },
+  "devDependencies": {
+    "@types/jasmine": "^3.6.2",
+    "@types/node": "^14.14.9",
+    "@types/node-cron": "^2.0.3",
+    "@types/yargs": "^15.0.10",
+    "@typescript-eslint/eslint-plugin": "^4.8.2",
+    "@typescript-eslint/eslint-plugin-tslint": "^4.8.2",
+    "@typescript-eslint/parser": "^4.8.2",
+    "eslint": "^7.14.0",
+    "jasmine": "^3.6.3",
+    "nyc": "^15.1.0",
+    "ts-node": "^9.0.0",
+    "typescript": "^4.1.2"
+  }
+}
