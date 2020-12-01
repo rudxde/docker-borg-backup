@@ -8,12 +8,21 @@ interface IOptions {
     sshHost: string;
     backupDir: string;
     borgRepository: string;
-    backupIntervalCron: string;
-    cleanupIntervalCron: string;
-    cleanupKeep: string;
     sshKeyFile: string;
     borgPassphrase?: string;
     borgPassphraseFile?: string;
+    list: boolean;
+    backup: boolean;
+    cleanup: boolean;
+}
+
+interface ICleanupOptions extends IOptions {
+    cleanupIntervalCron: string;
+    cleanupKeep: string;
+}
+
+interface IBackupOptions extends IOptions {
+    backupIntervalCron: string;
 }
 
 interface IBorgEnv {
@@ -22,7 +31,7 @@ interface IBorgEnv {
 }
 
 async function main() {
-    const options: IOptions = yargs
+    const args = await yargs
         .env()
         .option('sshPort', {
             type: 'number',
@@ -40,18 +49,6 @@ async function main() {
             type: 'string',
             demandOption: true,
         })
-        .option('backupIntervalCron', {
-            type: 'string',
-            demandOption: true,
-        })
-        .option('cleanupIntervalCron', {
-            type: 'string',
-            demandOption: true,
-        })
-        .option('cleanupKeep', {
-            type: 'string',
-            demandOption: true,
-        })
         .option('sshKeyFile', {
             type: 'string',
             demandOption: true,
@@ -62,7 +59,7 @@ async function main() {
         .option('borgPassphraseFile', {
             type: 'string',
         })
-        .check((args: IOptions) => {
+        .check((args: Partial<IOptions>) => {
             if (args.borgPassphrase || args.borgPassphraseFile) {
                 return true
             }
@@ -72,40 +69,107 @@ async function main() {
             type: 'string',
             demandOption: true,
         })
+        .option('list', {
+            type: 'boolean',
+            description: 'List all created backups',
+            default: false,
+        })
+        .option('backup', {
+            type: 'boolean',
+            description: 'Run the backup job',
+            default: false,
+        })
+        .option('backupIntervalCron', {
+            type: 'string',
+            // demandOption: true,
+        })
+        .implies('backup', 'backupIntervalCron')
+        .option('cleanup', {
+            type: 'boolean',
+            description: 'Run the cleanup job',
+            default: false,
+        })
+        .option('cleanupIntervalCron', {
+            type: 'string',
+            // demandOption: true,
+        })
+        .implies('cleanup', 'cleanupIntervalCron')
+        .option('cleanupKeep', {
+            type: 'string',
+            // demandOption: true,
+        })
+        .implies('cleanup', 'cleanupKeep')
+        .check(args => {
+            if (args.backup || args.list || args.cleanup) return true;
+            throw new Error('at least on mode of --backup --list -- cleanup is required!')
+        })
         .argv;
-    let borg_passphrase = options.borgPassphrase;
+    let borg_passphrase = args.borgPassphrase;
     if (!borg_passphrase) {
-        borg_passphrase = (await promises.readFile(options.borgPassphraseFile!)).toString();
+        borg_passphrase = (await promises.readFile(args.borgPassphraseFile!)).toString();
     }
     const borgEnv: IBorgEnv = {
         BORG_PASSPHRASE: borg_passphrase,
-        BORG_RSH: `ssh -i ${options.sshKeyFile} -o StrictHostKeyChecking=no`
+        BORG_RSH: `ssh -i ${args.sshKeyFile} -o StrictHostKeyChecking=no`
     };
+    await ensureRepoExists(args, borgEnv);
+    if (isList(args)) {
+        console.log('Created backups:')
+        await listBackups(args, borgEnv);
+    }
+    if (isBackup(args)) {
+        console.log(`Staring backup job with crontab "${args.backupIntervalCron}"`);
+        cron.schedule(args.backupIntervalCron, () => {
+            createBackup(args, borgEnv)
+                .catch(err => console.error(err));
+        });
+    }
+    if (isCleanup(args)) {
+        console.log(`Staring cleanup job with crontab "${args.cleanupIntervalCron}"`);
+        cron.schedule(args.cleanupIntervalCron, () => {
+            cleanupBackup(args, borgEnv)
+                .catch(err => console.error(err));
+        });
+    }
+}
+
+function isList(args: IOptions): boolean {
+    return args.list;
+}
+
+function isBackup(args: IOptions): args is IBackupOptions {
+    return args.backup;
+}
+
+function isCleanup(args: IOptions): args is ICleanupOptions {
+    return args.cleanup;
+}
+
+
+async function ensureRepoExists(options: IOptions, borgEnv: IBorgEnv) {
+    console.log('Checking if borg repository exists.')
     if (!await repoExists(options, borgEnv)) {
         await initBorgRepo(options, borgEnv);
     }
-    cron.schedule(options.backupIntervalCron, () => {
-        createBackup(options, borgEnv)
-            .catch(err => console.error(err));
-    });
-    cron.schedule(options.cleanupIntervalCron, () => {
-        cleanupBackup(options, borgEnv)
-            .catch(err => console.error(err));
-    });
 }
 
 async function initBorgRepo(options: IOptions, borgEnv: IBorgEnv) {
     await run('borg', ['init', '--encryption=repokey', getBorgRepoSelektor(options)], borgEnv, false);
 }
 
-async function createBackup(options: IOptions, borgEnv: IBorgEnv) {
+async function listBackups(options: IOptions, borgEnv: IBorgEnv) {
+    await run('borg', ['list', getBorgRepoSelektor(options)], borgEnv, false);
+}
+
+async function createBackup(options: IBackupOptions, borgEnv: IBorgEnv) {
     const backupName = (new Date()).toISOString();
+    console.log(`create backup with name '${backupName}'`);
     await run('borg', ['create', `${getBorgRepoSelektor(options)}::${backupName}`, options.backupDir], borgEnv, false);
 }
 
-async function cleanupBackup(options: IOptions, borgEnv: IBorgEnv) {
+async function cleanupBackup(options: ICleanupOptions, borgEnv: IBorgEnv) {
+    console.log(`cleanup backup that are older than ${options.cleanupKeep}`);
     await run('borg', ['prune', '--keep-within', options.cleanupKeep, getBorgRepoSelektor(options)], borgEnv, false);
-
 }
 
 async function restoreBackup() {

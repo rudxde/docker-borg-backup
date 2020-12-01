@@ -11,4 +11,4 @@ COPY ./tsconfig.json ./
 COPY ./src ./src
 RUN npm run build
 
-CMD [ "npm", "start" ]
+ENTRYPOINT [ "npm", "start" , "--"]
