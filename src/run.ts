@@ -9,9 +9,9 @@ import { spawn } from "child_process";
  * @returns {Promise<void>} resolves the Promise, if the program has exited
  */
 export function run(executable: string, args: string[], env?: { [key: string]: any }): Promise<void>;
-export function run(executable: string, args: string[], env?: { [key: string]: any }, readStdIO?: false): Promise<void>;
-export function run(executable: string, args: string[], env?: { [key: string]: any }, readStdIO?: true): Promise<string>;
-export function run(executable: string, args: string[], env?: { [key: string]: any }, readStdIO?: boolean): Promise<string | void> {
+export function run(executable: string, args: string[], env?: { [key: string]: any }, readStdIO?: false, cwd?: string): Promise<void>;
+export function run(executable: string, args: string[], env?: { [key: string]: any }, readStdIO?: true, cwd?: string): Promise<string>;
+export function run(executable: string, args: string[], env?: { [key: string]: any }, readStdIO?: boolean, cwd?: string): Promise<string | void> {
     return (new Promise((resolve, reject) => {
         let childProcess = spawn(executable, args, {
             stdio: [
@@ -20,6 +20,7 @@ export function run(executable: string, args: string[], env?: { [key: string]: a
                 "inherit",    // StdErr.
             ],
             env: env ? { ...process.env, ...env } : process.env,
+            cwd: cwd ? cwd : process.cwd(),
         });
         let result = "";
         if (readStdIO) {

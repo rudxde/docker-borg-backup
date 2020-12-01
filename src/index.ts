@@ -2,6 +2,7 @@ import { run } from './run';
 import { promises } from 'fs';
 import yargs from 'yargs';
 import * as cron from 'node-cron';
+import { join as pathJoin } from 'path';
 
 interface IOptions {
     sshPort: number;
@@ -14,6 +15,7 @@ interface IOptions {
     list: boolean;
     backup: boolean;
     cleanup: boolean;
+    restore: boolean;
 }
 
 interface ICleanupOptions extends IOptions {
@@ -23,6 +25,9 @@ interface ICleanupOptions extends IOptions {
 
 interface IBackupOptions extends IOptions {
     backupIntervalCron: string;
+}
+interface IRestoreOptions extends IOptions {
+    restoreBackupName: string;
 }
 
 interface IBorgEnv {
@@ -99,8 +104,17 @@ async function main() {
             // demandOption: true,
         })
         .implies('cleanup', 'cleanupKeep')
+        .option('restore', {
+            type: 'boolean',
+            description: 'Restore an backup',
+            default: false,
+        })
+        .option('restoreBackupName', {
+            type: 'string',
+        })
+        .implies('restore', 'restoreBackupName')
         .check(args => {
-            if (args.backup || args.list || args.cleanup) return true;
+            if (args.backup || args.list || args.cleanup || args.restore) return true;
             throw new Error('at least on mode of --backup --list -- cleanup is required!')
         })
         .argv;
@@ -114,8 +128,10 @@ async function main() {
     };
     await ensureRepoExists(args, borgEnv);
     if (isList(args)) {
-        console.log('Created backups:')
         await listBackups(args, borgEnv);
+    }
+    if (isRestore(args)) {
+        await restoreBackup(args, borgEnv);
     }
     if (isBackup(args)) {
         console.log(`Staring backup job with crontab "${args.backupIntervalCron}"`);
@@ -145,6 +161,9 @@ function isCleanup(args: IOptions): args is ICleanupOptions {
     return args.cleanup;
 }
 
+function isRestore(args: IOptions): args is IRestoreOptions {
+    return args.restore;
+}
 
 async function ensureRepoExists(options: IOptions, borgEnv: IBorgEnv) {
     console.log('Checking if borg repository exists.')
@@ -158,6 +177,7 @@ async function initBorgRepo(options: IOptions, borgEnv: IBorgEnv) {
 }
 
 async function listBackups(options: IOptions, borgEnv: IBorgEnv) {
+    console.log('Created backups:')
     await run('borg', ['list', getBorgRepoSelektor(options)], borgEnv, false);
 }
 
@@ -172,8 +192,11 @@ async function cleanupBackup(options: ICleanupOptions, borgEnv: IBorgEnv) {
     await run('borg', ['prune', '--keep-within', options.cleanupKeep, getBorgRepoSelektor(options)], borgEnv, false);
 }
 
-async function restoreBackup() {
-
+async function restoreBackup(options: IRestoreOptions, borgEnv: IBorgEnv): Promise<void> {
+    console.log(`restoring backup '${options.restoreBackupName}'`);
+    const extractPath = pathJoin(options.backupDir, '..');
+    await run('borg', ['extract', `${getBorgRepoSelektor(options)}::${options.restoreBackupName}`], borgEnv, false, extractPath);
+    console.log(`done`);
 }
 
 async function repoExists(options: IOptions, borgEnv: IBorgEnv) {
