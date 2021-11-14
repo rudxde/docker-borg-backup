@@ -2,7 +2,7 @@ FROM alpine
 
 WORKDIR /usr/src/app
 
-RUN apk add borgbackup openssh-client nodejs npm
+RUN apk add borgbackup openssh-client nodejs npm mongodb-tools
 
 COPY ./package.json ./
 COPY ./package-lock.json ./
