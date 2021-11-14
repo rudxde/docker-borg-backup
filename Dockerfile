@@ -1,6 +1,6 @@
 FROM alpine
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
 RUN apk add borgbackup openssh-client nodejs npm mongodb-tools
 
