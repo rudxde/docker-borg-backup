@@ -16,6 +16,10 @@ interface IOptions {
     backup: boolean;
     cleanup: boolean;
     restore: boolean;
+    preBackupHook?: string;
+    postBackupHook?: string;
+    preRestoreHook?: string;
+    postRestoreHook?: string;
 }
 
 interface ICleanupOptions extends IOptions {
@@ -117,6 +121,22 @@ async function main() {
             if (args.backup || args.list || args.cleanup || args.restore) return true;
             throw new Error('at least on mode of --backup --list -- cleanup is required!')
         })
+        .option('preBackupHook', {
+            type: 'string',
+            description: 'The provided command will be run before every backup.',
+        })
+        .option('postBackupHook', {
+            type: 'string',
+            description: 'The provided command will be run after every backup.',
+        })
+        .option('preRestoreHook', {
+            type: 'string',
+            description: 'The provided command will be run before every restore.',
+        })
+        .option('postRestoreHook', {
+            type: 'string',
+            description: 'The provided command will be run after every restore.',
+        })
         .argv;
     let borg_passphrase = args.borgPassphrase;
     if (!borg_passphrase) {
@@ -183,19 +203,24 @@ async function listBackups(options: IOptions, borgEnv: IBorgEnv) {
 
 async function createBackup(options: IBackupOptions, borgEnv: IBorgEnv) {
     const backupName = (new Date()).toISOString();
+    await executeHook(options, 'preBackup');
     console.log(`create backup with name '${backupName}'`);
     await run('borg', ['create', `${getBorgRepoSelektor(options)}::${backupName}`, options.backupDir], borgEnv, false);
+    await executeHook(options, 'postBackup');
 }
 
 async function cleanupBackup(options: ICleanupOptions, borgEnv: IBorgEnv) {
     console.log(`cleanup backup that are older than ${options.cleanupKeep}`);
     await run('borg', ['prune', '--keep-within', options.cleanupKeep, getBorgRepoSelektor(options)], borgEnv, false);
+    
 }
 
 async function restoreBackup(options: IRestoreOptions, borgEnv: IBorgEnv): Promise<void> {
     console.log(`restoring backup '${options.restoreBackupName}'`);
+    await executeHook(options, 'preRestore');
     const extractPath = pathJoin(options.backupDir, '..');
     await run('borg', ['extract', `${getBorgRepoSelektor(options)}::${options.restoreBackupName}`], borgEnv, false, extractPath);
+    await executeHook(options, 'postRestore');
     console.log(`done`);
 }
 
@@ -210,6 +235,20 @@ async function repoExists(options: IOptions, borgEnv: IBorgEnv) {
 
 function getBorgRepoSelektor(options: IOptions) {
     return `ssh://${options.sshHost}:${options.sshPort}/.${options.borgRepository}`;
+}
+
+async function executeHook(options: IOptions, mode: 'preBackup' | 'postBackup' | 'preRestore' | 'postRestore'): Promise<void> {
+    let hook =
+        mode === 'preBackup' ? options.preBackupHook :
+            mode === 'postBackup' ? options.postBackupHook :
+                mode === 'preRestore' ? options.preRestoreHook :
+                    mode === 'postRestore' ? options.postRestoreHook :
+                        undefined;
+    if (!hook) {
+        return;
+    }
+    const hookCommand = hook.split(' ');
+    await run(hookCommand[0], hookCommand.slice(1));
 }
 
 main().catch(err => {
