@@ -20,6 +20,7 @@ interface IOptions {
     postBackupHook?: string;
     preRestoreHook?: string;
     postRestoreHook?: string;
+    resetKeyPermissions: boolean;
 }
 
 interface ICleanupOptions extends IOptions {
@@ -137,6 +138,11 @@ async function main() {
             type: 'string',
             description: 'The provided command will be run after every restore.',
         })
+        .option('resetKeyPermissions', {
+            type: 'boolean',
+            default: true,
+            description: 'sets the permissions of the ssh keys at startup',
+        })
         .argv;
     let borg_passphrase = args.borgPassphrase;
     if (!borg_passphrase) {
@@ -146,6 +152,11 @@ async function main() {
         BORG_PASSPHRASE: borg_passphrase,
         BORG_RSH: `ssh -i ${args.sshKeyFile} -o StrictHostKeyChecking=no`
     };
+
+    if (args.resetKeyPermissions) {
+        await run('chmod', ['700', args.sshKeyFile]);
+    }
+
     await ensureRepoExists(args, borgEnv);
     if (isList(args)) {
         await listBackups(args, borgEnv);
@@ -212,7 +223,7 @@ async function createBackup(options: IBackupOptions, borgEnv: IBorgEnv) {
 async function cleanupBackup(options: ICleanupOptions, borgEnv: IBorgEnv) {
     console.log(`cleanup backup that are older than ${options.cleanupKeep}`);
     await run('borg', ['prune', '--keep-within', options.cleanupKeep, getBorgRepoSelektor(options)], borgEnv, false);
-    
+
 }
 
 async function restoreBackup(options: IRestoreOptions, borgEnv: IBorgEnv): Promise<void> {
