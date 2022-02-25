@@ -35,6 +35,8 @@ interface IRestoreOptions extends IOptions {
     restoreBackupName: string;
     restoreDirectory?: string;
     restoreExclude?: string;
+    restoreList: boolean;
+    restoreDry: boolean;
 }
 
 interface IBorgEnv {
@@ -124,6 +126,14 @@ async function main() {
         })
         .option('restoreExclude', {
             type: 'string'
+        })
+        .option('restoreList', {
+            type: 'boolean',
+            default: false,
+        })
+        .option('restoreDry', {
+            type: 'boolean',
+            default: false,
         })
         .implies('restore', 'restoreBackupName')
         .check(args => {
@@ -238,11 +248,15 @@ async function restoreBackup(options: IRestoreOptions, borgEnv: IBorgEnv): Promi
     console.log(`restoring backup '${options.restoreBackupName}'`);
     await executeHook(options, 'preRestore');
     const extractPath = pathJoin(options.backupDir, '..');
+    const restoreOptions: string[] = [
+        ...(options.restoreList ? ['--list'] : []),
+        ...(options.restoreDry ? ['--dry-run'] : []),
+    ];
     const additionalRestoreArgs: string[] = [
-        ...(options.restoreDirectory ? [options.restoreDirectory] : [] ),
+        ...(options.restoreDirectory ? [options.restoreDirectory] : []),
         ...(options.restoreExclude ? ['--exclude', options.restoreExclude] : [])
     ];
-    await run('borg', ['extract', `${getBorgRepoSelektor(options)}::${options.restoreBackupName}`, ...additionalRestoreArgs], borgEnv, false, extractPath);
+    await run('borg', ['extract', ...restoreOptions, `${getBorgRepoSelektor(options)}::${options.restoreBackupName}`, ...additionalRestoreArgs], borgEnv, false, extractPath);
     await executeHook(options, 'postRestore');
     console.log(`done`);
 }
