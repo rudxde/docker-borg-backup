@@ -14,6 +14,7 @@ interface IOptions {
     borgPassphraseFile?: string;
     list: boolean;
     backup: boolean;
+    backupNow: boolean;
     cleanup: boolean;
     restore: boolean;
     preBackupHook?: string;
@@ -91,6 +92,11 @@ async function main() {
         .option('backup', {
             type: 'boolean',
             description: 'Run the backup job',
+            default: false,
+        })
+        .option('backupNow', {
+            type: 'boolean',
+            description: 'Run the backup immediately job',
             default: false,
         })
         .option('backupIntervalCron', {
@@ -182,11 +188,16 @@ async function main() {
     if (isRestore(args)) {
         await restoreBackup(args, borgEnv);
     }
+    if (isBackupNow(args)) {
+        console.log(`Staring backup`);
+        await createBackup(args, borgEnv)
+            .catch(err => console.error(err));
+    }
     if (isBackup(args)) {
         console.log(`Staring backup job with crontab "${args.backupIntervalCron}"`);
         cron.schedule(args.backupIntervalCron, () => {
             createBackup(args, borgEnv)
-                .catch(err => console.error(err));
+            .catch(err => console.error(err));
         });
     }
     if (isCleanup(args)) {
@@ -204,6 +215,10 @@ function isList(args: IOptions): boolean {
 
 function isBackup(args: IOptions): args is IBackupOptions {
     return args.backup;
+}
+
+function isBackupNow(args: IOptions): args is IBackupOptions {
+    return args.backupNow;
 }
 
 function isCleanup(args: IOptions): args is ICleanupOptions {
