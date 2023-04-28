@@ -1,0 +1,66 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  master:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        name: Checkout [master]
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build image and push to Docker Hub
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: rudxde/docker-borg-backup:build.${{ github.run_number }}
+          platforms: linux/amd64,linux/arm64
+      - name: Checkout kube-tf
+        uses: actions/checkout@v3
+        with:
+          repository: rudxde/kube-tf
+          token: ${{ secrets.ACTIONS_TOKEN }}
+          path: terraform
+      - name: Update dev version in kube-tf
+        run: node update-version.js docker-borg-backup
+        env:
+          VERSION: build.${{ github.run_number }}
+          VERSION_FILE_PATH: terraform/images.json
+      - run: |
+         git config --global user.email "ci@example.com"
+         git config --global user.name "continuous integration"
+      - name: check for kube-tf changes
+        id: check-kube-tf-change
+        continue-on-error: true
+        run: |
+          cd terraform
+          git diff --exit-code
+      - name: commit kube-tf changes
+        if: steps.check-kube-tf-change.outcome != 'success'
+        run: |
+          cd terraform
+          git add images.json
+          git commit -m "update images to build.${{ github.run_number }}"
+          git push
+        env:
+          GH_TOKEN: ${{ secrets.ACTIONS_TOKEN }}
