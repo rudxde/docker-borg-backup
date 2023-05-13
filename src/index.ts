@@ -16,6 +16,7 @@ interface IOptions {
     backup: boolean;
     backupNow: boolean;
     cleanup: boolean;
+    cleanupNow: boolean;
     restore: boolean;
     preBackupHook?: string;
     postBackupHook?: string;
@@ -96,7 +97,7 @@ async function main() {
         })
         .option('backupNow', {
             type: 'boolean',
-            description: 'Run the backup immediately job',
+            description: 'Run the backup job immediately',
             default: false,
         })
         .option('backupIntervalCron', {
@@ -107,6 +108,11 @@ async function main() {
         .option('cleanup', {
             type: 'boolean',
             description: 'Run the cleanup job',
+            default: false,
+        })
+        .option('cleanupNow', {
+            type: 'boolean',
+            description: 'Run the cleanup job immediately',
             default: false,
         })
         .option('cleanupIntervalCron', {
@@ -207,6 +213,11 @@ async function main() {
                 .catch(err => console.error(err));
         });
     }
+    if (isCleanupNow(args)) {
+        console.log(`Staring cleanup`);
+        cleanupBackup(args, borgEnv)
+            .catch(err => console.error(err));
+    }
 }
 
 function isList(args: IOptions): boolean {
@@ -223,6 +234,10 @@ function isBackupNow(args: IOptions): args is IBackupOptions {
 
 function isCleanup(args: IOptions): args is ICleanupOptions {
     return args.cleanup;
+}
+
+function isCleanupNow(args: IOptions): args is ICleanupOptions {
+    return args.cleanupNow;
 }
 
 function isRestore(args: IOptions): args is IRestoreOptions {
